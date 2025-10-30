@@ -67,7 +67,7 @@ export function EncryptTab() {
     }
   }, [toast])
 
-  const handleEncrypt = async () => {
+  async function handleEncrypt() {
     if (!file || !password) {
       toast({
         variant: "destructive",
@@ -121,7 +121,7 @@ export function EncryptTab() {
     }
   }
 
-  const handleDownload = () => {
+  function handleDownload() {
     if (!encryptedBlob || !file) return
 
     // Determine extension based on stealth mode
@@ -167,7 +167,7 @@ export function EncryptTab() {
     }
   }
 
-  const handleReset = () => {
+  function handleReset() {
     setFile(null)
     setPassword("")
     setConfirmPassword("")
