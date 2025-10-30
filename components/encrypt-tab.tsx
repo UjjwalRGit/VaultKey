@@ -7,13 +7,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Progress } from "@/components/ui/progress"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { useToast } from "@/hooks/use-toast"
-import { Upload, Lock, Download, CheckCircle2, AlertCircle } from "lucide-react"
+import { Upload, Lock, Download, CheckCircle2, AlertCircle, Loader2, AlertTriangle } from "lucide-react"
 import { Switch } from "@/components/ui/switch"
-import { PasswordStrengthMeter } from "@/components/password-strength-meter"
-import { encryptFile } from "@/lib/crypto"
+import { PasswordStrengthMeter, usePasswordStrength } from "@/components/password-strength-meter"
+import { encryptFile, validateFileSize, formatFileSize, FileSizeError } from "@/lib/crypto"
 
 type EncryptionState = "idle" | "encrypting" | "success" | "error"
 
@@ -22,84 +21,102 @@ export function EncryptTab() {
   const [password, setPassword] = useState("")
   const [confirmPassword, setConfirmPassword] = useState("")
   const [state, setState] = useState<EncryptionState>("idle")
-  const [progress, setProgress] = useState(0)
   const [encryptedBlob, setEncryptedBlob] = useState<Blob | null>(null)
-  const [backupCopy, setBackupCopy] = useState(false)
+  const [backupCopy, setBackupCopy] = useState(true) // Default enabled as per spec
   const [stealthMode, setStealthMode] = useState(false)
+  const [errorMessage, setErrorMessage] = useState("")
   const { toast } = useToast()
+
+  // Use the hook to get password strength without callback
+  const passwordStrength = usePasswordStrength(password)
 
   const handleFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0]
     if (selectedFile) {
+      // Validate file size
+      if (!validateFileSize(selectedFile)) {
+        toast({
+          variant: "destructive",
+          title: "📦 File Too Large",
+          description: `Your file (${formatFileSize(selectedFile.size)}) exceeds the maximum size of 500MB. Please select a smaller file.`,
+        })
+        return
+      }
       setFile(selectedFile)
       setState("idle")
+      setErrorMessage("")
     }
-  }, [])
+  }, [toast])
 
   const handleDrop = useCallback((e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault()
     const droppedFile = e.dataTransfer.files[0]
     if (droppedFile) {
+      // Validate file size
+      if (!validateFileSize(droppedFile)) {
+        toast({
+          variant: "destructive",
+          title: "📦 File Too Large",
+          description: `Your file (${formatFileSize(droppedFile.size)}) exceeds the maximum size of 500MB. Please select a smaller file.`,
+        })
+        return
+      }
       setFile(droppedFile)
       setState("idle")
+      setErrorMessage("")
     }
-  }, [])
+  }, [toast])
 
   const handleEncrypt = async () => {
     if (!file || !password) {
       toast({
-        title: "Missing information",
-        description: "Please select a file and enter a password",
         variant: "destructive",
+        title: "⚠️ Missing Information",
+        description: "Please select a file and enter a password before encrypting.",
       })
       return
     }
 
     if (password !== confirmPassword) {
       toast({
-        title: "Password mismatch",
-        description: "Passwords do not match",
         variant: "destructive",
+        title: "❌ Password Mismatch",
+        description: "The passwords you entered do not match. Please make sure both password fields are identical.",
       })
       return
     }
 
-    if (password.length < 8) {
+    // Validate password strength
+    if (!passwordStrength.isValid) {
       toast({
-        title: "Weak password",
-        description: "Password must be at least 8 characters",
         variant: "destructive",
+        title: "🔒 Password Too Weak",
+        description: "Your password must be at least 12 characters long with a strength score of 3 or higher. Try adding numbers, symbols, and mixing upper/lowercase letters.",
       })
       return
     }
 
     setState("encrypting")
-    setProgress(0)
+    setErrorMessage("")
 
     try {
-      // Simulate progress
-      const progressInterval = setInterval(() => {
-        setProgress((prev) => Math.min(prev + 10, 90))
-      }, 100)
-
       const encrypted = await encryptFile(file, password)
 
-      clearInterval(progressInterval)
-      setProgress(100)
       setEncryptedBlob(encrypted)
       setState("success")
 
       toast({
-        title: "Encryption successful",
-        description: "Your file has been encrypted securely",
-        className: "bg-success text-success-foreground",
+        title: "✅ Encryption Successful",
+        description: "Your file has been encrypted securely. Click the download button below to save it.",
       })
     } catch (error) {
       setState("error")
+      const message = error instanceof Error ? error.message : "An error occurred during encryption"
+      setErrorMessage(message)
       toast({
-        title: "Encryption failed",
-        description: error instanceof Error ? error.message : "An error occurred",
         variant: "destructive",
+        title: "❌ Encryption Failed",
+        description: message,
       })
     }
   }
@@ -107,26 +124,45 @@ export function EncryptTab() {
   const handleDownload = () => {
     if (!encryptedBlob || !file) return
 
+    // Determine extension based on stealth mode
     const extension = stealthMode ? ".dat" : ".enc"
+    
+    // For stealth mode, strip the original extension to obscure file type
+    let downloadName = file.name
+    if (stealthMode) {
+      // Remove the last extension (e.g., document.pdf -> document)
+      const lastDotIndex = downloadName.lastIndexOf(".")
+      if (lastDotIndex > 0) {
+        downloadName = downloadName.substring(0, lastDotIndex)
+      }
+    }
+
+    // Download encrypted file
     const url = URL.createObjectURL(encryptedBlob)
     const a = document.createElement("a")
     a.href = url
-    a.download = `${file.name}${extension}`
+    a.download = `${downloadName}${extension}`
     document.body.appendChild(a)
     a.click()
     document.body.removeChild(a)
     URL.revokeObjectURL(url)
 
+    // Download PLAINTEXT backup copy if enabled
     if (backupCopy) {
       setTimeout(() => {
-        const backupUrl = URL.createObjectURL(encryptedBlob)
+        const backupUrl = URL.createObjectURL(file)
         const backupLink = document.createElement("a")
         backupLink.href = backupUrl
-        backupLink.download = `${file.name}.backup${extension}`
+        backupLink.download = `${file.name}.backup`
         document.body.appendChild(backupLink)
         backupLink.click()
         document.body.removeChild(backupLink)
         URL.revokeObjectURL(backupUrl)
+
+        toast({
+          title: "💾 Backup Saved",
+          description: "⚠️ Plaintext backup copy downloaded. Remember: this backup is NOT encrypted! Store it securely.",
+        })
       }, 500)
     }
   }
@@ -136,8 +172,8 @@ export function EncryptTab() {
     setPassword("")
     setConfirmPassword("")
     setState("idle")
-    setProgress(0)
     setEncryptedBlob(null)
+    setErrorMessage("")
   }
 
   return (
@@ -170,12 +206,12 @@ export function EncryptTab() {
               {file ? (
                 <div>
                   <p className="font-medium text-foreground">{file.name}</p>
-                  <p className="text-sm text-muted-foreground mt-1">{(file.size / 1024 / 1024).toFixed(2)} MB</p>
+                  <p className="text-sm text-muted-foreground mt-1">{formatFileSize(file.size)}</p>
                 </div>
               ) : (
                 <div>
                   <p className="font-medium text-foreground">Drop file here or click to browse</p>
-                  <p className="text-sm text-muted-foreground mt-1">Any file type supported</p>
+                  <p className="text-sm text-muted-foreground mt-1">Maximum file size: 500MB</p>
                 </div>
               )}
             </label>
@@ -191,12 +227,14 @@ export function EncryptTab() {
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="Enter a strong password"
+              placeholder="Enter a strong password (min 12 characters)"
               disabled={state === "encrypting"}
             />
           </div>
 
-          {password && <PasswordStrengthMeter password={password} />}
+          {password && (
+            <PasswordStrengthMeter password={password} />
+          )}
 
           <div className="space-y-2">
             <Label htmlFor="confirm-password">Confirm Password</Label>
@@ -207,18 +245,34 @@ export function EncryptTab() {
               onChange={(e) => setConfirmPassword(e.target.value)}
               placeholder="Re-enter your password"
               disabled={state === "encrypting"}
+              className={confirmPassword && password !== confirmPassword ? "border-destructive" : ""}
             />
+            {confirmPassword && password !== confirmPassword && (
+              <p className="text-sm text-destructive">Passwords do not match</p>
+            )}
           </div>
         </div>
 
         {/* Options */}
         <div className="space-y-4 pt-2">
-          <div className="flex items-center justify-between">
-            <div className="space-y-0.5">
-              <Label htmlFor="backup-copy" className="text-base">
-                Create backup copy
-              </Label>
-              <p className="text-sm text-muted-foreground">Download two copies of the encrypted file</p>
+          <div className="flex items-start justify-between gap-4">
+            <div className="space-y-1 flex-1">
+              <div className="flex items-center gap-2">
+                <Label htmlFor="backup-copy" className="text-base">
+                  Create backup copy
+                </Label>
+                {backupCopy && (
+                  <AlertTriangle className="h-4 w-4 text-warning" />
+                )}
+              </div>
+              <p className="text-sm text-muted-foreground">
+                Downloads a plaintext copy of your original file
+              </p>
+              {backupCopy && (
+                <p className="text-xs text-warning">
+                  ⚠️ Warning: Backup is unencrypted. Store it securely!
+                </p>
+              )}
             </div>
             <Switch
               id="backup-copy"
@@ -233,7 +287,9 @@ export function EncryptTab() {
               <Label htmlFor="stealth-mode" className="text-base">
                 Stealth mode
               </Label>
-              <p className="text-sm text-muted-foreground">Use .dat extension instead of .enc</p>
+              <p className="text-sm text-muted-foreground">
+                Use .dat extension and hide original file type
+              </p>
             </div>
             <Switch
               id="stealth-mode"
@@ -244,14 +300,11 @@ export function EncryptTab() {
           </div>
         </div>
 
-        {/* Progress */}
+        {/* Encrypting State with Spinner */}
         {state === "encrypting" && (
-          <div className="space-y-2">
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-muted-foreground">Encrypting...</span>
-              <span className="font-medium">{progress}%</span>
-            </div>
-            <Progress value={progress} className="h-2" />
+          <div className="flex items-center justify-center gap-3 py-4">
+            <Loader2 className="h-6 w-6 animate-spin text-primary" />
+            <span className="text-sm font-medium">Encrypting your file...</span>
           </div>
         )}
 
@@ -269,7 +322,7 @@ export function EncryptTab() {
         {state === "error" && (
           <Alert variant="destructive">
             <AlertCircle className="h-4 w-4" />
-            <AlertDescription>Encryption failed. Please try again.</AlertDescription>
+            <AlertDescription>{errorMessage || "Encryption failed. Please try again."}</AlertDescription>
           </Alert>
         )}
 
@@ -288,7 +341,7 @@ export function EncryptTab() {
           ) : (
             <Button
               onClick={handleEncrypt}
-              disabled={!file || !password || !confirmPassword || state === "encrypting"}
+              disabled={!file || !password || !confirmPassword || !passwordStrength.isValid || state === "encrypting"}
               className="w-full gap-2"
             >
               <Lock className="h-4 w-4" />

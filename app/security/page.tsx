@@ -59,14 +59,14 @@ export default function SecurityPage() {
                 <div>
                   <h3 className="font-semibold mb-2">PBKDF2 Key Derivation</h3>
                   <p className="text-muted-foreground leading-relaxed">
-                    Your password is converted into a cryptographic key using PBKDF2 with 100,000 iterations, making
+                    Your password is converted into a cryptographic key using PBKDF2-SHA256 with 250,000 iterations, making
                     brute-force attacks computationally infeasible.
                   </p>
                 </div>
                 <div>
                   <h3 className="font-semibold mb-2">Random Salt & IV</h3>
                   <p className="text-muted-foreground leading-relaxed">
-                    Each encryption uses a unique random salt and initialization vector (IV), ensuring that encrypting
+                    Each encryption uses a unique random salt (16 bytes) and initialization vector (12 bytes), ensuring that encrypting
                     the same file twice produces different outputs.
                   </p>
                 </div>
@@ -88,7 +88,7 @@ export default function SecurityPage() {
                   <span className="text-primary font-bold">•</span>
                   <div>
                     <strong className="text-foreground">Use at least 12 characters</strong>
-                    <p className="text-sm text-muted-foreground">Longer passwords are exponentially harder to crack</p>
+                    <p className="text-sm text-muted-foreground">Longer passwords are exponentially harder to crack. VaultKey requires a minimum of 12 characters.</p>
                   </div>
                 </li>
                 <li className="flex gap-3">
@@ -96,16 +96,16 @@ export default function SecurityPage() {
                   <div>
                     <strong className="text-foreground">Mix character types</strong>
                     <p className="text-sm text-muted-foreground">
-                      Combine uppercase, lowercase, numbers, and special characters
+                      Combine uppercase, lowercase, numbers, and special characters for maximum strength
                     </p>
                   </div>
                 </li>
                 <li className="flex gap-3">
                   <span className="text-primary font-bold">•</span>
                   <div>
-                    <strong className="text-foreground">Avoid common words</strong>
+                    <strong className="text-foreground">Avoid common words and patterns</strong>
                     <p className="text-sm text-muted-foreground">
-                      Don't use dictionary words, names, or predictable patterns
+                      Don't use dictionary words, names, dates, or predictable patterns. VaultKey analyzes password strength in real-time.
                     </p>
                   </div>
                 </li>
@@ -114,7 +114,7 @@ export default function SecurityPage() {
                   <div>
                     <strong className="text-foreground">Store passwords securely</strong>
                     <p className="text-sm text-muted-foreground">
-                      Use a password manager or write it down and store it safely
+                      Use a password manager or write it down and store it in a physically secure location
                     </p>
                   </div>
                 </li>
@@ -145,8 +145,8 @@ export default function SecurityPage() {
                 <h4 className="font-semibold text-sm">What this means for you:</h4>
                 <ul className="text-sm text-muted-foreground space-y-1">
                   <li>✓ Complete privacy - no one can intercept your files</li>
-                  <li>✓ Works offline - no internet connection required</li>
-                  <li>✓ No file size limits - encrypt files of any size</li>
+                  <li>✓ Works offline - no internet connection required after loading</li>
+                  <li>✓ Large file support - encrypt files up to 500MB</li>
                   <li>✓ No account required - use VaultKey anonymously</li>
                 </ul>
               </div>
@@ -163,16 +163,61 @@ export default function SecurityPage() {
             </CardHeader>
             <CardContent className="space-y-4">
               <p className="text-muted-foreground leading-relaxed">
-                Encrypted files contain the original filename, salt, IV, and encrypted data in a structured format. The
-                file extension is .enc by default, or .dat in stealth mode.
+                VaultKey uses a custom file format with a header that contains all the information needed for decryption
+                (except the password). The file extension is .enc by default, or .dat in stealth mode.
               </p>
               <div className="bg-muted/50 rounded-lg p-4 font-mono text-sm">
-                <div className="text-muted-foreground">File structure:</div>
-                <div className="mt-2 space-y-1">
-                  <div>• Original filename (encrypted)</div>
-                  <div>• Salt (16 bytes)</div>
-                  <div>• IV (12 bytes)</div>
-                  <div>• Encrypted file data</div>
+                <div className="text-muted-foreground mb-2">File structure (Version 1):</div>
+                <div className="space-y-1">
+                  <div>• Magic bytes: "VK" (2 bytes) - File identifier</div>
+                  <div>• Version: 0x01 (1 byte) - Format version</div>
+                  <div>• Salt: 16 bytes - For key derivation</div>
+                  <div>• IV: 12 bytes - Initialization vector</div>
+                  <div>• Filename length: 4 bytes - Size of encrypted name</div>
+                  <div>• Encrypted filename - Original file name</div>
+                  <div>• Encrypted file data - Your file content</div>
+                </div>
+              </div>
+              <Alert className="bg-muted/30 border-muted">
+                <AlertDescription className="text-sm">
+                  The encrypted filename and file data are authenticated with AES-GCM, preventing tampering.
+                  Any modification to the file will cause decryption to fail.
+                </AlertDescription>
+              </Alert>
+            </CardContent>
+          </Card>
+
+          {/* Features */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Shield className="h-5 w-5 text-primary" />
+                Additional Features
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                <div>
+                  <h3 className="font-semibold mb-2">Backup Copy Option</h3>
+                  <p className="text-muted-foreground leading-relaxed">
+                    Optionally create a plaintext backup of your original file alongside the encrypted version.
+                    This backup is saved with a <code className="text-xs bg-muted px-1 py-0.5 rounded">.backup</code> extension.
+                  </p>
+                </div>
+                <div>
+                  <h3 className="font-semibold mb-2">Stealth Mode</h3>
+                  <p className="text-muted-foreground leading-relaxed">
+                    Stealth mode uses the <code className="text-xs bg-muted px-1 py-0.5 rounded">.dat</code> extension
+                    instead of <code className="text-xs bg-muted px-1 py-0.5 rounded">.enc</code> and hides the original
+                    file extension, making encrypted files less conspicuous.
+                  </p>
+                </div>
+                <div>
+                  <h3 className="font-semibold mb-2">File Size Limit</h3>
+                  <p className="text-muted-foreground leading-relaxed">
+                    VaultKey supports files up to 500MB to ensure reliable browser performance. This covers most document,
+                    image, and video files.
+                  </p>
                 </div>
               </div>
             </CardContent>

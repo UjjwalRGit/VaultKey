@@ -7,11 +7,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Progress } from "@/components/ui/progress"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { useToast } from "@/hooks/use-toast"
-import { Upload, Unlock, Download, CheckCircle2, AlertCircle } from "lucide-react"
-import { decryptFile } from "@/lib/crypto"
+import { Upload, Unlock, Download, CheckCircle2, AlertCircle, Loader2 } from "lucide-react"
+import { decryptFile, PasswordError, CorruptedFileError, UnsupportedVersionError } from "@/lib/crypto"
 
 type DecryptionState = "idle" | "decrypting" | "success" | "error"
 
@@ -19,10 +18,10 @@ export function DecryptTab() {
   const [file, setFile] = useState<File | null>(null)
   const [password, setPassword] = useState("")
   const [state, setState] = useState<DecryptionState>("idle")
-  const [progress, setProgress] = useState(0)
   const [decryptedBlob, setDecryptedBlob] = useState<Blob | null>(null)
   const [originalFilename, setOriginalFilename] = useState("")
   const [errorMessage, setErrorMessage] = useState("")
+  const [errorType, setErrorType] = useState<"password" | "corrupted" | "version" | "unknown">("unknown")
   const { toast } = useToast()
 
   const handleFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
@@ -31,6 +30,7 @@ export function DecryptTab() {
       setFile(selectedFile)
       setState("idle")
       setErrorMessage("")
+      setErrorType("unknown")
     }
   }, [])
 
@@ -41,57 +41,65 @@ export function DecryptTab() {
       setFile(droppedFile)
       setState("idle")
       setErrorMessage("")
+      setErrorType("unknown")
     }
   }, [])
 
-  const handleDecrypt = async () => {
+  async function handleDecrypt() {
     if (!file || !password) {
       toast({
-        title: "Missing information",
+        title: "Missing Information",
         description: "Please select an encrypted file and enter the password",
-        variant: "destructive",
+        variant: "destructive"
       })
       return
     }
 
     setState("decrypting")
-    setProgress(0)
     setErrorMessage("")
+    setErrorType("unknown")
 
     try {
-      // Simulate progress
-      const progressInterval = setInterval(() => {
-        setProgress((prev) => Math.min(prev + 10, 90))
-      }, 100)
-
       const result = await decryptFile(file, password)
 
-      clearInterval(progressInterval)
-      setProgress(100)
       setDecryptedBlob(result.blob)
       setOriginalFilename(result.filename)
       setState("success")
 
       toast({
         title: "Decryption successful",
-        description: "Your file has been decrypted",
-        className: "bg-success text-success-foreground",
+        description: "Your file has been decrypted"
       })
     } catch (error) {
       setState("error")
-      const message = error instanceof Error ? error.message : "An error occurred"
-      setErrorMessage(message)
+
+      //Different Errors
+      if (error instanceof PasswordError) {
+        setErrorType("password")
+        setErrorMessage("Incorrect password. Please check your password and try again.")
+      } else if (error instanceof CorruptedFileError) {
+        setErrorType("corrupted")
+        setErrorMessage(error.message)
+      } else if (error instanceof UnsupportedVersionError) {
+        setErrorType("version")
+        setErrorMessage(error.message)
+      } else {
+        setErrorType("unknown")
+        setErrorMessage(error instanceof Error ? error.message : "An unexpected error occurred")
+      }
+
       toast({
         title: "Decryption failed",
-        description: message,
-        variant: "destructive",
+        description: errorMessage || "Could not decrypt file",
+        variant: "destructive"
       })
     }
   }
 
-  const handleDownload = () => {
-    if (!decryptedBlob) return
-
+  function handleDownload() {
+    if (!decryptedBlob) {
+      return
+    }
     const url = URL.createObjectURL(decryptedBlob)
     const a = document.createElement("a")
     a.href = url
@@ -100,16 +108,35 @@ export function DecryptTab() {
     a.click()
     document.body.removeChild(a)
     URL.revokeObjectURL(url)
+
+    toast({
+      title: "File downloaded",
+      description: `${originalFilename} has been saved`
+    })
   }
 
-  const handleReset = () => {
+  function handleReset() {
     setFile(null)
     setPassword("")
     setState("idle")
-    setProgress(0)
     setDecryptedBlob(null)
     setOriginalFilename("")
     setErrorMessage("")
+    setErrorType("unknown")
+  }
+
+  // Get icon for error type
+  const getErrorIcon = () => {
+    switch (errorType) {
+      case "password":
+        return <AlertCircle className="h-4 w-4" />
+      case "corrupted":
+        return <AlertCircle className="h-4 w-4" />
+      case "version":
+        return <AlertCircle className="h-4 w-4" />
+      default:
+        return <AlertCircle className="h-4 w-4" />
+    }
   }
 
   return (
@@ -173,14 +200,11 @@ export function DecryptTab() {
           />
         </div>
 
-        {/* Progress */}
+        {/* Decrypting State with Spinner */}
         {state === "decrypting" && (
-          <div className="space-y-2">
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-muted-foreground">Decrypting...</span>
-              <span className="font-medium">{progress}%</span>
-            </div>
-            <Progress value={progress} className="h-2" />
+          <div className="flex items-center justify-center gap-3 py-4">
+            <Loader2 className="h-6 w-6 animate-spin text-primary" />
+            <span className="text-sm font-medium">Decrypting your file...</span>
           </div>
         )}
 
@@ -194,12 +218,35 @@ export function DecryptTab() {
           </Alert>
         )}
 
-        {/* Error State */}
+        {/* Error State with Different Messages */}
         {state === "error" && (
           <Alert variant="destructive">
-            <AlertCircle className="h-4 w-4" />
+            {getErrorIcon()}
             <AlertDescription>
-              {errorMessage || "Decryption failed. Please check your password and try again."}
+              <div className="space-y-2">
+                <p className="font-medium">
+                  {errorType === "password" && "Incorrect Password"}
+                  {errorType === "corrupted" && "File Corrupted"}
+                  {errorType === "version" && "Unsupported Version"}
+                  {errorType === "unknown" && "Decryption Failed"}
+                </p>
+                <p className="text-sm">{errorMessage}</p>
+                {errorType === "password" && (
+                  <p className="text-xs opacity-90">
+                    Tip: Make sure you're using the exact password that was used to encrypt this file.
+                  </p>
+                )}
+                {errorType === "corrupted" && (
+                  <p className="text-xs opacity-90">
+                    The file may have been modified, incompletely downloaded, or is not a valid VaultKey encrypted file.
+                  </p>
+                )}
+                {errorType === "version" && (
+                  <p className="text-xs opacity-90">
+                    This file was created with a different version of VaultKey. Please use the correct version to decrypt it.
+                  </p>
+                )}
+              </div>
             </AlertDescription>
           </Alert>
         )}
