@@ -7,6 +7,7 @@ import "./globals.css"
 import { Toaster } from "@/components/ui/toaster"
 import { Suspense } from "react"
 import { ThemeProvider } from "@/components/theme-provider"
+import Footer from "@/components/footer"
 
 export const metadata: Metadata = {
   title: "VaultKey - Secure File Encryption",
@@ -32,6 +33,7 @@ export default function RootLayout({
             {children}
             <Toaster />
           </Suspense>
+          <Footer/>
         </ThemeProvider>
         <Analytics />
       </body>

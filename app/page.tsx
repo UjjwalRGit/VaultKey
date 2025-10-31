@@ -41,13 +41,6 @@ export default function Home() {
             <DecryptTab />
           </TabsContent>
         </Tabs>
-
-        {/* Security Notice */}
-        <div className="mt-8 p-4 bg-muted/50 rounded-lg text-center">
-          <p className="text-sm text-muted-foreground">
-            🔒 All encryption happens in your browser. Your files never leave your device.
-          </p>
-        </div>
       </main>
     </div>
   )
