@@ -30,9 +30,25 @@ export function EncryptTab() {
   // Use the hook to get password strength without callback
   const passwordStrength = usePasswordStrength(password)
 
+  // Helper function to check if file is already encrypted
+  function isEncryptedFile(file: File): boolean{
+    const fileName = file.name.toLowerCase()
+    return fileName.endsWith('.enc') || fileName.endsWith('.dat')
+  }
+
   const handleFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0]
     if (selectedFile) {
+      // Check if file is already encrypted
+      if (isEncryptedFile(selectedFile)) {
+        toast({
+          variant: "destructive",
+          title: "🔒 Already Encrypted",
+          description: "This file appears to be already encrypted (.enc or .dat). Please select an unencrypted file to encrypt.",
+        })
+        return
+      }
+      
       // Validate file size
       if (!validateFileSize(selectedFile)) {
         toast({
@@ -52,6 +68,16 @@ export function EncryptTab() {
     e.preventDefault()
     const droppedFile = e.dataTransfer.files[0]
     if (droppedFile) {
+      // Check if file is already encrypted
+      if (isEncryptedFile(droppedFile)) {
+        toast({
+          variant: "destructive",
+          title: "🔒 Already Encrypted",
+          description: "This file appears to be already encrypted (.enc or .dat). Please select an unencrypted file to encrypt.",
+        })
+        return
+      }
+      
       // Validate file size
       if (!validateFileSize(droppedFile)) {
         toast({
